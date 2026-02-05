@@ -431,6 +431,29 @@ export async function runEmbeddedPiAgent(
                 },
               };
             }
+            // Handle unsupported role errors with a user-friendly message
+            if (/unexpected role|invalid role|unsupported role|role.*not supported|role.*invalid/i.test(errorText)) {
+              return {
+                payloads: [
+                  {
+                    text:
+                      "The current model does not support the message role type in your conversation history. " +
+                      "Use /new to start a fresh session.",
+                    isError: true,
+                  },
+                ],
+                meta: {
+                  durationMs: Date.now() - started,
+                  agentMeta: {
+                    sessionId: sessionIdUsed,
+                    provider,
+                    model: model.id,
+                  },
+                  systemPromptReport: attempt.systemPromptReport,
+                  error: { kind: "role_unsupported", message: errorText },
+                },
+              };
+            }
             // Handle role ordering errors with a user-friendly message
             if (/incorrect role information|roles must alternate/i.test(errorText)) {
               return {

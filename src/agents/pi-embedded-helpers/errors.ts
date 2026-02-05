@@ -339,15 +339,27 @@ export function formatAssistantErrorText(
     );
   }
 
-  // Catch role ordering errors - including JSON-wrapped and "400" prefix variants
-  if (
-    /incorrect role information|roles must alternate|400.*role|"message".*role.*information/i.test(
-      raw,
-    )
-  ) {
+  // Catch role ordering errors - messages must alternate between user and assistant
+  if (/incorrect role information|roles must alternate|"message".*role.*information/i.test(raw)) {
     return (
       "Message ordering conflict - please try again. " +
       "If this persists, use /new to start a fresh session."
+    );
+  }
+
+  // Catch unsupported role type errors
+  if (/unexpected role|invalid role|unsupported role|role.*not supported|role.*invalid/i.test(raw)) {
+    return (
+      "The current model does not support the message role type in your conversation history. " +
+      "Use /new to start a fresh session with the current model."
+    );
+  }
+
+  // Generic role-related errors (fallback)
+  if (/\b400\b.*\brole\b/i.test(raw)) {
+    return (
+      "Role-related API error. This may be caused by incompatible message history. " +
+      "Use /new to start a fresh session."
     );
   }
 
@@ -389,10 +401,27 @@ export function sanitizeUserFacingText(text: string): string {
     return stripped;
   }
 
-  if (/incorrect role information|roles must alternate/i.test(trimmed)) {
+  // Catch role ordering errors - messages must alternate between user and assistant
+  if (/incorrect role information|roles must alternate|"message".*role.*information/i.test(trimmed)) {
     return (
       "Message ordering conflict - please try again. " +
       "If this persists, use /new to start a fresh session."
+    );
+  }
+
+  // Catch unsupported role type errors
+  if (/unexpected role|invalid role|unsupported role|role.*not supported|role.*invalid/i.test(trimmed)) {
+    return (
+      "The current model does not support the message role type in your conversation history. " +
+      "Use /new to start a fresh session with the current model."
+    );
+  }
+
+  // Generic role-related errors (fallback)
+  if (/\b400\b.*\brole\b/i.test(trimmed)) {
+    return (
+      "Role-related API error. This may be caused by incompatible message history. " +
+      "Use /new to start a fresh session."
     );
   }
 

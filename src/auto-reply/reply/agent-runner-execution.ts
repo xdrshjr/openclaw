@@ -483,6 +483,17 @@ export async function runAgentTurnWithFallback(params: {
           },
         };
       }
+      if (embeddedError?.kind === "role_unsupported") {
+        const didReset = await params.resetSessionAfterRoleOrderingConflict(embeddedError.message);
+        if (didReset) {
+          return {
+            kind: "final",
+            payload: {
+              text: "⚠️ Role type not supported by current model. I've reset the conversation - please try again.",
+            },
+          };
+        }
+      }
       if (embeddedError?.kind === "role_ordering") {
         const didReset = await params.resetSessionAfterRoleOrderingConflict(embeddedError.message);
         if (didReset) {
@@ -502,6 +513,7 @@ export async function runAgentTurnWithFallback(params: {
       const isCompactionFailure = isCompactionFailureError(message);
       const isSessionCorruption = /function call turn comes immediately after/i.test(message);
       const isRoleOrderingError = /incorrect role information|roles must alternate/i.test(message);
+      const isRoleUnsupportedError = /unexpected role|invalid role|unsupported role|role.*not supported|role.*invalid/i.test(message);
 
       if (
         isCompactionFailure &&
@@ -515,6 +527,17 @@ export async function runAgentTurnWithFallback(params: {
             text: "⚠️ Context limit exceeded during compaction. I've reset our conversation to start fresh - please try again.\n\nTo prevent this, increase your compaction buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 4000 or higher in your config.",
           },
         };
+      }
+      if (isRoleUnsupportedError) {
+        const didReset = await params.resetSessionAfterRoleOrderingConflict(message);
+        if (didReset) {
+          return {
+            kind: "final",
+            payload: {
+              text: "⚠️ Role type not supported by current model. I've reset the conversation - please try again.",
+            },
+          };
+        }
       }
       if (isRoleOrderingError) {
         const didReset = await params.resetSessionAfterRoleOrderingConflict(message);

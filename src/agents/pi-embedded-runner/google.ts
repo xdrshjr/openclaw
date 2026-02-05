@@ -322,6 +322,60 @@ export function applyGoogleTurnOrderingFix(params: {
   return { messages: sanitized, didPrepend };
 }
 
+/**
+ * Check and fix incompatible message roles when switching models.
+ * Different AI providers support different role types:
+ * - Anthropic (Claude): only supports 'user' and 'assistant'
+ * - Google (Gemini): supports 'user', 'assistant', and 'tool'
+ * - OpenAI/Kimi/Qwen: supports 'user', 'assistant', 'system', 'developer', and 'tool'
+ *
+ * @param messages - Array of messages to sanitize
+ * @param modelApi - The model API identifier (e.g., "anthropic-messages", "google-gemini")
+ * @param provider - Provider name (reserved for future use in provider-specific logic)
+ * @returns Filtered array containing only messages with supported roles
+ *
+ * @internal Exported for testing
+ */
+export function sanitizeMessageRolesForModel(
+  messages: AgentMessage[],
+  modelApi?: string | null,
+  provider?: string, // Reserved for future provider-specific role filtering
+): AgentMessage[] {
+  // Determine supported roles based on model API
+  const supportedRoles = (() => {
+    if (modelApi === "anthropic-messages") {
+      // Anthropic only supports user and assistant
+      return new Set(["user", "assistant"]);
+    }
+    if (modelApi === "google-gemini" || modelApi === "google-gemini-preview") {
+      // Gemini supports user, assistant, tool
+      return new Set(["user", "assistant", "tool"]);
+    }
+    // OpenAI and other providers support all roles
+    return new Set(["user", "assistant", "system", "developer", "tool"]);
+  })();
+
+  // Filter out messages with unsupported roles
+  let filteredCount = 0;
+  const result = messages.filter((msg) => {
+    const role = (msg as { role?: string }).role;
+    if (!role || supportedRoles.has(role)) {
+      return true;
+    }
+    filteredCount++;
+    return false;
+  });
+
+  // Log once if any messages were filtered (for debugging)
+  if (filteredCount > 0) {
+    console.warn(
+      `[sanitizeMessageRolesForModel] Filtered ${filteredCount} message(s) with unsupported roles for model API "${modelApi}"`,
+    );
+  }
+
+  return result;
+}
+
 export async function sanitizeSessionHistory(params: {
   messages: AgentMessage[];
   modelApi?: string | null;
@@ -371,6 +425,13 @@ export async function sanitizeSessionHistory(params: {
       ? downgradeOpenAIReasoningBlocks(repairedTools)
       : repairedTools;
 
+  // If the model changed, sanitize roles for compatibility
+  // Note: This may remove messages that reference filtered content, but this is acceptable
+  // during model switching as the user is typically starting a new interaction context.
+  const sanitizedRoles = modelChanged
+    ? sanitizeMessageRolesForModel(sanitizedOpenAI, params.modelApi, params.provider)
+    : sanitizedOpenAI;
+
   if (hasSnapshot && (!priorSnapshot || modelChanged)) {
     appendModelSnapshot(params.sessionManager, {
       timestamp: Date.now(),
@@ -381,11 +442,11 @@ export async function sanitizeSessionHistory(params: {
   }
 
   if (!policy.applyGoogleTurnOrdering) {
-    return sanitizedOpenAI;
+    return sanitizedRoles;
   }
 
   return applyGoogleTurnOrderingFix({
-    messages: sanitizedOpenAI,
+    messages: sanitizedRoles,
     modelApi: params.modelApi,
     sessionManager: params.sessionManager,
     sessionId: params.sessionId,
